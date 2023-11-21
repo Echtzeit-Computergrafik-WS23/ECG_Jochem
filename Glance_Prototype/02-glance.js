@@ -13,6 +13,11 @@ canvas.addEventListener('mousemove', (event) =>
     cursor[1] = (event.offsetY / canvas.height) * -2 + 1
 })
 
+document.addEventListener("keydown", (event) =>
+{
+    handleKeyPress(event);
+});
+
 function onMouseDrag(callback)
 {
     canvas.addEventListener('pointerdown', () =>
@@ -114,9 +119,9 @@ const worldFragmentShader = `#version 300 es
     void main() {
 
         // texture
-        vec3 texAmbient = texture(u_texAmbient, f_texCoord).rgb;
+        vec3 texAmbient = texture(u_texDiffuse, f_texCoord).rgb;
         vec3 texDiffuse = texture(u_texDiffuse, f_texCoord).rgb;
-        vec3 texSpecular = texture(u_texSpecular, f_texCoord).rgb;
+        vec3 texSpecular = texture(u_texDiffuse, f_texCoord).rgb;
 
         // ambient
         vec3 ambient = max(vec3(u_ambient), texAmbient) * texDiffuse;
@@ -137,6 +142,59 @@ const worldFragmentShader = `#version 300 es
         FragColor = vec4(ambient + diffuse + specular, 1.0);
     }
 `
+
+
+const cubeFragmentShader = `#version 300 es
+    precision mediump float;
+
+    uniform float u_ambient;
+    uniform float u_specular;
+    uniform float u_shininess;
+    uniform vec3 u_lightPos;
+    uniform vec3 u_lightColor;
+    uniform vec3 u_viewPos;
+    uniform sampler2D u_texAmbient;
+    uniform sampler2D u_texDiffuse;
+    uniform sampler2D u_texSpecular;
+
+    in vec3 f_worldPos;
+    in vec3 f_normal;
+    in vec2 f_texCoord;
+
+    out vec4 FragColor;
+
+    void main() {
+
+        // texture
+        vec3 texAmbient = texture(u_texDiffuse, f_texCoord).rgb;
+        vec3 texDiffuse = texture(u_texDiffuse, f_texCoord).rgb;
+        vec3 texSpecular = texture(u_texDiffuse, f_texCoord).rgb;
+
+        // ambient
+        vec3 ambient = max(vec3(u_ambient), texAmbient) * texDiffuse;
+
+        // diffuse
+        vec3 normal = normalize(f_normal);
+        vec3 lightDir = normalize(u_lightPos - f_worldPos);
+        float diffuseIntensity = max(dot(normal, lightDir), 0.0);
+        vec3 diffuse = diffuseIntensity * u_lightColor * texDiffuse;
+
+        // specular
+        vec3 viewDir = normalize(u_viewPos - f_worldPos);
+        vec3 halfWay = normalize(lightDir + viewDir);
+        float specularIntensity = pow(max(dot(normal, halfWay), 0.0), u_shininess);
+        vec3 specular = (u_specular * specularIntensity) * texSpecular * u_lightColor;
+
+        // color
+        FragColor = vec4(ambient + diffuse + specular, 1.0);
+    }
+`
+
+
+
+
+
+
 
 
 const skyVertexShader = `#version 300 es
@@ -193,7 +251,7 @@ const worldShader = glance.buildShaderProgram(gl, "world-shader", worldVertexSha
     u_ambient: 0.1,
     u_specular: 0.6,
     u_shininess: 64,
-    u_lightPos: [0, 0, 5],
+    u_lightPos: [0, 5, 5],
     u_lightColor: [1, 1, 1],
     u_projectionMatrix: projectionMatrix,
     u_texAmbient: 0,
@@ -205,7 +263,7 @@ const worldShader = glance.buildShaderProgram(gl, "world-shader", worldVertexSha
 //     128,     // tubularSegments
 //     32,      // radialSegments
 // ))
-const sizeWorld = [1.5, 0.1, 1.5]
+const sizeWorld = [3, 0.1, 3]
 const wordlpos = [0,0,0]
 const worldIBO = glance.createIndexBuffer(gl, glance.createBoxIndices());
 const worldABO = glance.createAttributeBuffer(gl, "world-abo", glance.createBoxAttributes(sizeWorld, wordlpos), {
@@ -219,15 +277,14 @@ const worldVAO = glance.createVAO(
     worldIBO,
     glance.buildAttributeMap(worldShader, worldABO, ["a_pos", "a_normal","a_texCoord"])
 )
-const worldTextureAmbient = glance.loadTexture(gl, "img/Earth_Ambient.avif")
-const worldTextureDiffuse = glance.loadTexture(gl, "img/Earth_Diffuse.avif")
-const worldTextureSpecular = glance.loadTexture(gl, "img/Earth_Specular.avif")
+const worldTextureAmbient = glance.loadTexture(gl, "img/ground.avif")
+const worldTextureDiffuse = glance.loadTexture(gl, "img/ground.avif")
+const worldTextureSpecular = glance.loadTexture(gl, "img/ground.avif")
 
-
-
+const cubeTextureDiffuse = glance.loadTexture(gl, "img/sauce.avif");
 // cube
-const sizeSmallCube = [0.5, 0.5, 0.5]
-const positionSmallCube = [0, 0.35, 0]
+const sizeSmallCube = [0.4, 0.4, 0.4]
+const positionSmallCube = [0, 0.25, 0]
 const cubeIBO = glance.createIndexBuffer(gl, glance.createBoxIndices());
 const cubeABO = glance.createAttributeBuffer(gl, "cube-abo", glance.createBoxAttributes(sizeSmallCube, positionSmallCube), {
     a_pos: { size: 3, type: gl.FLOAT },
@@ -280,6 +337,15 @@ let viewDist = 4.5
 let viewPan = 0
 let viewTilt = 0
 
+let moveX = 0;
+let moveZ = 0;
+let posX = 0;
+let posZ = 0;
+
+
+let moveSpeed = 0.05;
+
+
 const worldDrawCall = glance.createDrawCall(
     gl,
     worldShader,
@@ -311,9 +377,10 @@ const cubeDrawCall = glance.createDrawCall(
     worldShader,
     cubeVAO,
     {
+
         // uniform update callbacks
-        u_modelMatrix: (time) => mat4.multiply(mat4.identity(), mat4.fromRotation(1, [0, 1, 0])),
-        u_normalMatrix: (time) => mat3.fromMat4(mat4.transpose(mat4.invert(mat4.multiply(mat4.identity(), mat4.fromRotation(1, [0, 1, 0]))))),
+        u_modelMatrix: (time) => mat4.multiply(mat4.identity(), mat4.translate(mat4.identity(), [posX, 0, posZ])),
+        u_normalMatrix: (time) => mat3.fromMat4(mat4.transpose(mat4.invert(mat4.multiply(mat4.identity(), mat4.translate(mat4.identity(), [posX, 0, posZ]))))),
         u_viewMatrix: () => mat4.invert(mat4.multiply(mat4.multiply(
             mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
             mat4.fromRotation(viewTilt, [1, 0, 0])
@@ -325,9 +392,9 @@ const cubeDrawCall = glance.createDrawCall(
     },
     [
         // texture bindings
-        [0, worldTextureAmbient],
-        [1, worldTextureDiffuse],
-        [2, worldTextureSpecular],
+        [0, cubeTextureDiffuse],
+        [1, cubeTextureDiffuse],
+        [2, cubeTextureDiffuse],
     ]
 )
 
@@ -384,3 +451,28 @@ onMouseWheel((e) =>
 {
     viewDist = Math.max(1.5, Math.min(10, viewDist * (1 + Math.sign(e.deltaY) * 0.2)))
 })
+
+function handleKeyPress(e){
+    // Access the pressed key using event.key
+    switch (e.key) {
+        case "a":
+            moveX = - 1;
+            moveZ = 0;
+            break;
+        case "d":
+            moveX = 1;
+            moveZ = 0;
+            break;
+        case "s":
+            moveX = 0;
+            moveZ =  1;
+            break;
+        case "w":
+            moveX = 0;
+            moveZ = -1;
+            break;
+    }
+
+    posX += moveX * moveSpeed;
+    posZ += moveZ * moveSpeed;
+}
