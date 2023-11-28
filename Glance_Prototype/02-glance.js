@@ -13,10 +13,7 @@ canvas.addEventListener('mousemove', (event) =>
     cursor[1] = (event.offsetY / canvas.height) * -2 + 1
 })
 
-document.addEventListener("keydown", (event) =>
-{
-    handleKeyPress(event);
-});
+
 
 function onMouseDrag(callback)
 {
@@ -39,6 +36,20 @@ function onMouseWheel(callback)
 {
     canvas.addEventListener('wheel', callback)
 }
+
+
+
+function onKeyDown(callback)
+{
+    canvas.addEventListener('keydown', callback)
+}
+
+function onKeyUp(callback)
+{
+    canvas.addEventListener('keyup', callback)
+}
+
+
 
 // Basic render loop manager.
 function setRenderLoop(callback)
@@ -144,20 +155,42 @@ const worldFragmentShader = `#version 300 es
 `
 
 
+
+
+const cubeVertexShader = `#version 300 es
+    precision highp float;
+
+    uniform mat4 u_modelMatrix;
+    uniform mat4 u_viewMatrix;
+    uniform mat4 u_projectionMatrix;
+    uniform mat3 u_normalMatrix;
+
+    in vec3 a_pos;
+    in vec3 a_normal;
+    in vec2 a_texCoord;
+
+    out vec3 f_cubePos;
+    out vec3 f_normal;
+    out vec2 f_texCoord;
+
+    void main() {
+        f_cubePos = vec3(u_modelMatrix * vec4(a_pos, 1.0));
+        f_normal = u_normalMatrix * a_normal;
+        f_texCoord = a_texCoord;
+        gl_Position = u_projectionMatrix * u_viewMatrix * u_modelMatrix * vec4(a_pos, 1.0);
+    }
+`
+
 const cubeFragmentShader = `#version 300 es
     precision mediump float;
 
-    uniform float u_ambient;
-    uniform float u_specular;
-    uniform float u_shininess;
+    uniform vec3 u_ambientColor;
+    uniform float u_ambientIntensity;
     uniform vec3 u_lightPos;
     uniform vec3 u_lightColor;
-    uniform vec3 u_viewPos;
-    uniform sampler2D u_texAmbient;
     uniform sampler2D u_texDiffuse;
-    uniform sampler2D u_texSpecular;
 
-    in vec3 f_worldPos;
+    in vec3 f_cubePos;
     in vec3 f_normal;
     in vec2 f_texCoord;
 
@@ -166,35 +199,21 @@ const cubeFragmentShader = `#version 300 es
     void main() {
 
         // texture
-        vec3 texAmbient = texture(u_texDiffuse, f_texCoord).rgb;
         vec3 texDiffuse = texture(u_texDiffuse, f_texCoord).rgb;
-        vec3 texSpecular = texture(u_texDiffuse, f_texCoord).rgb;
-
-        // ambient
-        vec3 ambient = max(vec3(u_ambient), texAmbient) * texDiffuse;
 
         // diffuse
         vec3 normal = normalize(f_normal);
-        vec3 lightDir = normalize(u_lightPos - f_worldPos);
+        vec3 lightDir = normalize(u_lightPos - f_cubePos);
         float diffuseIntensity = max(dot(normal, lightDir), 0.0);
         vec3 diffuse = diffuseIntensity * u_lightColor * texDiffuse;
 
-        // specular
-        vec3 viewDir = normalize(u_viewPos - f_worldPos);
-        vec3 halfWay = normalize(lightDir + viewDir);
-        float specularIntensity = pow(max(dot(normal, halfWay), 0.0), u_shininess);
-        vec3 specular = (u_specular * specularIntensity) * texSpecular * u_lightColor;
+        // ambient
+        vec3 ambient = u_ambientColor * u_ambientIntensity * texDiffuse;
 
         // color
-        FragColor = vec4(ambient + diffuse + specular, 1.0);
-    }
+        FragColor = vec4(ambient + diffuse, 1.0);
+}
 `
-
-
-
-
-
-
 
 
 const skyVertexShader = `#version 300 es
@@ -246,7 +265,7 @@ const skyFragmentShader = `#version 300 es
 const projectionMatrix = mat4.perspective(Math.PI / 4, 1, 0.1, 14)
 
 
-// The world
+//----------------------------------------------------------- The world
 const worldShader = glance.buildShaderProgram(gl, "world-shader", worldVertexShader, worldFragmentShader, {
     u_ambient: 0.1,
     u_specular: 0.6,
@@ -259,10 +278,7 @@ const worldShader = glance.buildShaderProgram(gl, "world-shader", worldVertexSha
     u_texSpecular: 2,
 })
 
-// const worldIBO = glance.createIndexBuffer(gl, glance.createTorusKnotIndices(
-//     128,     // tubularSegments
-//     32,      // radialSegments
-// ))
+
 const sizeWorld = [3, 0.1, 3]
 const wordlpos = [0,0,0]
 const worldIBO = glance.createIndexBuffer(gl, glance.createBoxIndices());
@@ -282,7 +298,7 @@ const worldTextureDiffuse = glance.loadTexture(gl, "img/ground.avif")
 const worldTextureSpecular = glance.loadTexture(gl, "img/ground.avif")
 
 const cubeTextureDiffuse = glance.loadTexture(gl, "img/sauce.avif");
-// cube
+// ----------------------------------------- Cubeeee
 const sizeSmallCube = [0.4, 0.4, 0.4]
 const positionSmallCube = [0, 0.25, 0]
 const cubeIBO = glance.createIndexBuffer(gl, glance.createBoxIndices());
@@ -299,8 +315,18 @@ const cubeVAO = glance.createVAO(
 )
 
 
+const [cubeCubemap, cubeCubeMapLoaded] = glance.loadCubemap(gl, "cube-texture", [
+    "img/cubeTex_1.avif",
+    "img/cubeTex_2.avif",
+    "img/cubeTex_3.avif",
+    "img/cubeTex_4.avif",
+    "img/cubeTex_5.avif",
+    "img/cubeTex_6.avif",
+])
 
-// The skybox
+
+
+// -------------------------------------------The skybox
 const skyShader = glance.buildShaderProgram(gl, "sky-shader", skyVertexShader, skyFragmentShader, {
     u_projectionMatrix: projectionMatrix,
     u_skybox: 0,
@@ -452,7 +478,8 @@ onMouseWheel((e) =>
     viewDist = Math.max(1.5, Math.min(10, viewDist * (1 + Math.sign(e.deltaY) * 0.2)))
 })
 
-function handleKeyPress(e){
+onKeyDown((e)=>
+ {
     // Access the pressed key using event.key
     switch (e.key) {
         case "a":
@@ -475,4 +502,4 @@ function handleKeyPress(e){
 
     posX += moveX * moveSpeed;
     posZ += moveZ * moveSpeed;
-}
+});
