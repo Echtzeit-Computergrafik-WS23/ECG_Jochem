@@ -407,6 +407,136 @@ function createTorusKnotIndices(tubularSegments = 64, radialSegments = 8)
     }
     return indices
 }
+
+
+
+/**
+ * Takes a raw OBJ data object and creates an attribute, and index buffer from it.
+ * @param objData OBJ data to expand.
+ * @returns [Attributes, Indices]
+ */
+function expandObj(objData) {
+    let positions = [];
+    let texCoords = [];
+    let normals = [];
+    let indices = [];
+    // Expand the raw OBJ data into arrays of vertex attributes and indices.
+    let vertIdx = 0;
+    const knownIndices = new Map();
+    for (const splitIndex of objData.splitIndices) {
+        const vertexKey = splitIndex.join("|");
+        // Detect duplicate vertices
+        const existingVertex = knownIndices.get(vertexKey);
+        if (existingVertex !== undefined) {
+            indices.push(existingVertex);
+            continue;
+        }
+        const [posIdx, uvIdx, normIdx] = splitIndex;
+        // Create a new vertex
+        const positionIndex = posIdx * 3;
+        positions.push(...objData.positions.slice(positionIndex, positionIndex + 3));
+        const uvIndex = uvIdx * 2;
+        texCoords.push(...objData.texCoords.slice(uvIndex, uvIndex + 2));
+        const normalIndex = normIdx * 3;
+        normals.push(...objData.normals.slice(normalIndex, normalIndex + 3));
+        indices.push(vertIdx);
+        knownIndices.set(vertexKey, vertIdx);
+        vertIdx++;
+    }
+    // Interleave the vertex attributes.
+    const attributes = interleaveArrays([positions, texCoords, normals], [3, 2, 3]);
+    return [attributes, indices];
+}
+/** 
+* @param text The text contents of the OBJ file.
+* @returns A promise that resolves to the parsed OBJ data.
+*/
+function parseObj(text) {
+   // Ignore comments, materials, groups, and smooth shading
+   const ignoredLines = new Set(["#", "mtllib", "g", "usemtl", "s", ""]);
+   // Parse the OBJ contents
+   let name = undefined;
+   const positions = [];
+   const splitIndices = [];
+   const normals = [];
+   const texCoords = [];
+   const lines = text.split("\n");
+   for (const [index, line] of lines.entries()) {
+       const tokens = line.split(" ");
+       const type = tokens[0];
+       if (ignoredLines.has(type)) {
+           continue;
+       }
+       else if (type === "o") {
+           if (name === undefined) {
+               name = tokens[1];
+           }
+           else {
+               throwError(() => `Multiple object names defined in OBJ file (on line ${index})`);
+           }
+       }
+       else if (type === "v") {
+           positions.push(parseFloat(tokens[1]), parseFloat(tokens[2]), parseFloat(tokens[3]));
+       }
+       else if (type === "vn") {
+           normals.push(parseFloat(tokens[1]), parseFloat(tokens[2]), parseFloat(tokens[3]));
+       }
+       else if (type === "vt") {
+           texCoords.push(parseFloat(tokens[1]), parseFloat(tokens[2]));
+       }
+       else if (type === "f") {
+           for (let i = 1; i <= 3; i++) {
+               const face = tokens[i].split("/");
+               splitIndices.push([
+                   parseInt(face[0]) - 1,
+                   parseInt(face[1]) - 1,
+                   parseInt(face[2]) - 1, // normal
+               ]);
+           }
+       }
+       else {
+           logWarning(() => `Unexpected OBJ token: '${type}' on line ${index}`);
+       }
+   }
+   if (name === undefined) {
+       throwError(() => "No object name defined in OBJ file");
+   }
+   return {
+       name,
+       positions,
+       texCoords,
+       normals,
+       splitIndices,
+   };
+}
+
+
+/**
+ * Load an OBJ file and return the vertex attributes and indices.
+ * The attributes are interleaved as [position(3), texcoord(2), normal(3)].
+ * @param path Location of the OBJ file.
+ * @returns [Attributes, Indices]
+ */
+async function loadObj(path) {
+    // Load the OBJ file
+    const response = await fetch(path);
+    const text = await response.text();
+    // Parse the OBJ file
+    const objData = parseObj(text);
+    // Expand the OBJ data
+    const [attributes, indices] = expandObj(objData);
+    return {
+        name: objData.name,
+        attributes,
+        indices,
+    };
+}
+
+
+
+
+
+
 // /** Creates a fullscreen quad with the given options.
 //  * @param gl The WebGL context.
 //  * @param name The name of the fullscreen entity.
