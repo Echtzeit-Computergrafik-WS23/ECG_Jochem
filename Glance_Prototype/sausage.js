@@ -401,7 +401,13 @@ let posX = 0;
 let posZ = 0;
 
 
-let moveSpeed = 0.05;
+
+
+let cubeModelMatrix = mat4.identity();
+
+
+
+let moveSpeed = 0.15;
 
 
 const worldDrawCall = glance.createDrawCall(
@@ -410,8 +416,8 @@ const worldDrawCall = glance.createDrawCall(
     worldVAO,
     {
         // uniform update callbacks
-        u_modelMatrix: (time) => mat4.multiply(mat4.identity(), mat4.fromRotation(0, [0, 1, 0])),
-        u_normalMatrix: (time) => mat3.fromMat4(mat4.transpose(mat4.invert(mat4.multiply(mat4.identity(), mat4.fromRotation(0, [0, 1, 0]))))),
+        u_modelMatrix: (time) => mat4.identity(),
+        u_normalMatrix: (time) => mat3.fromMat4(mat4.transpose(mat4.invert(mat4.identity()))),
         u_viewMatrix: () => mat4.invert(mat4.multiply(mat4.multiply(
             mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
             mat4.fromRotation(viewTilt, [1, 0, 0])
@@ -437,8 +443,9 @@ const cubeDrawCall = glance.createDrawCall(
     {
 
         // uniform update callbacks
-        u_modelMatrix: (time) => mat4.multiply(mat4.identity(), mat4.translate(mat4.identity(), [posX, 0, posZ])),
-        u_normalMatrix: (time) => mat3.fromMat4(mat4.transpose(mat4.invert(mat4.multiply(mat4.identity(), mat4.translate(mat4.identity(), [posX, 0, posZ]))))),
+        u_modelMatrix: (time) => cubeModelMatrix,
+        //u_modelMatrix: (time) => mat4.multiply(mat4.identity(), mat4.rotate(mat4.identity(), 5, 1)),
+        u_normalMatrix: (time) => mat3.fromMat4(mat4.transpose(mat4.invert(cubeModelMatrix))),
         u_viewMatrix: () => mat4.invert(mat4.multiply(mat4.multiply(
             mat4.multiply(mat4.identity(), mat4.fromRotation(viewPan, [0, 1, 0])),
             mat4.fromRotation(viewTilt, [1, 0, 0])
@@ -453,6 +460,27 @@ const cubeDrawCall = glance.createDrawCall(
     ],
     () => cubeCubeMapLoaded.isComplete()
 )
+
+
+
+function updateMoveModelMatrix(time){
+    let updatedMatrix = mat4.multiply(mat4.identity(), mat4.translate(mat4.identity(), [posX, 0, posZ]))
+    return updatedMatrix
+}
+
+
+
+
+
+function rotateAroundAxis(degree,axis){
+    let updatedMatrix =  mat4.multiply(mat4.identity(), mat4.translate(mat4.identity(),axis))  
+    updatedMatrix = mat4.multiply(updatedMatrix, mat4.fromRotation(degree, [1, 0, 0]))
+    updatedMatrix = mat4.multiply(updatedMatrix,mat4.translate(mat4.identity(),[-axis[0],-axis[1], -axis[2]]))
+   
+    return updatedMatrix
+}
+
+
 
 
 
@@ -483,18 +511,26 @@ const skyDrawCall = glance.createDrawCall(
 // System Integration
 // =============================================================================
 
-function tween(start, end, duration) {
-    const startTime = Date.now();
+let moveStarted = false;
+let startTime = 0
+let startedAnimation = false
 
-    return function () {
-        const currentTime = Date.now() - startTime;
-        const t = Math.min(1, currentTime / duration);
-        return start + t * (end - start);
-    };
+
+let axis = [0,-0.2,0.2]
+function tween(start, end, duration, time) {
+        if(!startedAnimation){
+            startTime = time
+            startedAnimation = true
+        }
+        const currentTime = time - startTime;
+        const t = Math.min(1, currentTime / duration)
+        const result =start + t * (end - start)
+        if(result == end){
+            startedAnimation = false
+            moveStarted = false
+        }
+        return result ;
 }
-
-const myTween = tween(0, 90, 600);
-
 
 
 setRenderLoop((time) =>
@@ -505,9 +541,15 @@ setRenderLoop((time) =>
     gl.depthFunc(gl.LEQUAL)
 
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+  
+    if(moveStarted){
+        let rad = tween(0,Math.PI/2,1000,time)       
+        cubeModelMatrix = rotateAroundAxis(rad,axis)
+    }
 
-    glance.performDrawCall(gl, worldDrawCall, time)
     glance.performDrawCall(gl, cubeDrawCall, time)
+    glance.performDrawCall(gl, worldDrawCall, time)
+    
     glance.performDrawCall(gl, skyDrawCall, time)
 })
 
@@ -516,6 +558,10 @@ onMouseDrag((e) =>
     viewPan += e.movementX * -.01
     viewTilt += e.movementY * -.01
 })
+
+
+
+
 
 onMouseWheel((e) =>
 {
@@ -537,6 +583,9 @@ onKeyDown((e)=>
         case "s":
             moveX = 0;
             moveZ =  1;
+            
+            moveStarted = true;
+           
             break;
         case "w":
             moveX = 0;
@@ -546,4 +595,4 @@ onKeyDown((e)=>
 
     posX += moveX * moveSpeed;
     posZ += moveZ * moveSpeed;
-});
+})
