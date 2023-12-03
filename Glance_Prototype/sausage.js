@@ -538,7 +538,7 @@ let rotEnded = false
 let axis = [0,-0.2,0.2]
 
 
-let xAxisRot = 0;
+
 
 function tween(start, end, duration, time) {
         if(!startedAnimation){
@@ -580,24 +580,36 @@ setRenderLoop((time) =>
     glance.performDrawCall(gl, skyDrawCall, time)
 
     if(rotEnded){
+        // the Matrix for making rotations around is rotated 90 degrees, and new bottom axis will be defined
         matrix4 = rotateAroundAxis2(Math.PI/2,axis)
-        axis[1] += yTransl[idx]
-        axis[2] += xTransl[idx]
-        console.log(axis[1])
+        //axis[1] += yTransl[idx]
+        //axis[2] += xTransl[idx]
+       
+        let y = round2Decimals(0.4 * Math.cos(idx * Math.PI/2)) 
+        let x = round2Decimals(0.4 * Math.sin(idx * (Math.PI/2 - Math.PI))) 
+        axis[1] += y
+        axis[2] += x
+        console.log("y="+y +" x="+x)
         idx++;
-        if(idx >=4){
+        /*if(idx >=4){
             idx = 0
-        }
+        }*/
         rotEnded = false
     }
 })
 
 
-let rotationAngles = [Math.PI/2,Math.PI]
+
 let yTransl = [0.4,0,-0.4,0]
 let xTransl = [0,-0.4,0,0.4]
 
 let idx = 0;
+
+
+function round2Decimals(value){
+    return  Math.round(value * 100) / 100
+}
+
 
 onMouseDrag((e) =>
 {
