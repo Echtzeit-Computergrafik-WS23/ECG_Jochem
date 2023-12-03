@@ -473,6 +473,7 @@ function updateMoveModelMatrix(time){
 
 
 function rotateAroundAxis(degree,axis){
+    
     let updatedMatrix =  mat4.multiply(mat4.identity(), mat4.translate(mat4.identity(),axis))  
     updatedMatrix = mat4.multiply(updatedMatrix, mat4.fromRotation(degree, [1, 0, 0]))
     updatedMatrix = mat4.multiply(updatedMatrix,mat4.translate(mat4.identity(),[-axis[0],-axis[1], -axis[2]]))
@@ -481,8 +482,26 @@ function rotateAroundAxis(degree,axis){
 }
 
 
+let matrix4 =  mat4.identity();
 
 
+function rotateAroundAxis2(degree, axis) {
+    let rotationMatrix = mat4.fromRotation(degree, [1,0,0]);
+    let translatedMatrix = mat4.translate(mat4.identity(), axis);
+
+    // Multiply the input matrix with the translation matrix
+    let updatedMatrix = mat4.multiply( mat4.clone(matrix4), translatedMatrix);
+
+    // Multiply the result with the rotation matrix
+    updatedMatrix = mat4.multiply(updatedMatrix, rotationMatrix);
+
+    // Multiply the result with the inverse of the translation matrix
+    updatedMatrix = mat4.multiply(updatedMatrix, mat4.invert(translatedMatrix));
+
+    
+
+    return updatedMatrix;
+}
 
 
 const skyDrawCall = glance.createDrawCall(
@@ -515,8 +534,12 @@ let moveStarted = false;
 let startTime = 0
 let startedAnimation = false
 
-
+let rotEnded = false
 let axis = [0,-0.2,0.2]
+
+
+let xAxisRot = 0;
+
 function tween(start, end, duration, time) {
         if(!startedAnimation){
             startTime = time
@@ -528,9 +551,13 @@ function tween(start, end, duration, time) {
         if(result == end){
             startedAnimation = false
             moveStarted = false
+            rotEnded = true
         }
         return result ;
 }
+
+
+
 
 
 setRenderLoop((time) =>
@@ -544,14 +571,33 @@ setRenderLoop((time) =>
   
     if(moveStarted){
         let rad = tween(0,Math.PI/2,1000,time)       
-        cubeModelMatrix = rotateAroundAxis(rad,axis)
+        cubeModelMatrix = rotateAroundAxis2(rad,axis)
     }
 
     glance.performDrawCall(gl, cubeDrawCall, time)
     glance.performDrawCall(gl, worldDrawCall, time)
     
     glance.performDrawCall(gl, skyDrawCall, time)
+
+    if(rotEnded){
+        matrix4 = rotateAroundAxis2(Math.PI/2,axis)
+        axis[1] += yTransl[idx]
+        axis[2] += xTransl[idx]
+        console.log(axis[1])
+        idx++;
+        if(idx >=4){
+            idx = 0
+        }
+        rotEnded = false
+    }
 })
+
+
+let rotationAngles = [Math.PI/2,Math.PI]
+let yTransl = [0.4,0,-0.4,0]
+let xTransl = [0,-0.4,0,0.4]
+
+let idx = 0;
 
 onMouseDrag((e) =>
 {
