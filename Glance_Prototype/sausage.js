@@ -117,9 +117,7 @@ const worldFragmentShader = `#version 300 es
     uniform vec3 u_lightPos;
     uniform vec3 u_lightColor;
     uniform vec3 u_viewPos;
-    uniform sampler2D u_texAmbient;
     uniform sampler2D u_texDiffuse;
-    uniform sampler2D u_texSpecular;
 
     in vec3 f_worldPos;
     in vec3 f_normal;
@@ -280,18 +278,16 @@ const projectionMatrix = mat4.perspective(Math.PI / 4, 1, 0.1, 14)
 //----------------------------------------------------------- The world
 const worldShader = glance.buildShaderProgram(gl, "world-shader", worldVertexShader, worldFragmentShader, {
     u_ambient: 0.1,
-    u_specular: 0.6,
-    u_shininess: 64,
+    u_specular: 0.3,
+    u_shininess: 0.4,
     u_lightPos: [0, 5, 5],
-    u_lightColor: [1, 1, 1],
+    u_lightColor: [0.6, 0.6, 0.6],
     u_projectionMatrix: projectionMatrix,
-    u_texAmbient: 0,
-    u_texDiffuse: 1,
-    u_texSpecular: 2,
+    u_texDiffuse: 0,
 })
 
 
-const sizeWorld = [3, 0.1, 3]
+const sizeWorld = [4, 0.1, 4]
 const wordlpos = [0,-0.25,0]
 const worldIBO = glance.createIndexBuffer(gl, glance.createBoxIndices());
 const worldABO = glance.createAttributeBuffer(gl, "world-abo", glance.createBoxAttributes(sizeWorld, wordlpos), {
@@ -305,9 +301,9 @@ const worldVAO = glance.createVAO(
     worldIBO,
     glance.buildAttributeMap(worldShader, worldABO, ["a_pos", "a_normal","a_texCoord"])
 )
-const worldTextureAmbient = glance.loadTexture(gl, "img/ground.avif")
-const worldTextureDiffuse = glance.loadTexture(gl, "img/ground.avif")
-const worldTextureSpecular = glance.loadTexture(gl, "img/ground.avif")
+//const worldTextureAmbient = glance.loadTexture(gl, "img/ground.avif")
+const worldTextureDiffuse = glance.loadTexture(gl, "img/Sand_TextureS.jpg")
+//const worldTextureSpecular = glance.loadTexture(gl, "img/ground.avif")
 
 const cubeTextureDiffuse = glance.loadTexture(gl, "img/sauce.avif");
 // ----------------------------------------- Cubeeee
@@ -372,16 +368,28 @@ const skyABO = glance.createAttributeBuffer(gl, "sky-abo", glance.createSkyBoxAt
 
 const skyVAO = glance.createVAO(gl, "sky-vao", skyIBO, glance.buildAttributeMap(skyShader, skyABO, ["a_pos"]))
 
-const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", [
+/*const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", [
     "img/Skybox_Right.avif",
     "img/Skybox_Left.avif",
     "img/Skybox_Top.avif",
     "img/Skybox_Bottom.avif",
     "img/Skybox_Front.avif",
     "img/Skybox_Back.avif",
+])*/
+
+
+
+
+
+
+const [skyCubemap, skyCubeMapLoaded] = glance.loadCubemap(gl, "sky-texture", [
+    "img/himmel_rechts.jpg",
+    "img/himmel_links.jpg",
+    "img/himmel_oben.jpg",
+    "img/himmel_unten.jpg",
+    "img/himmel_vorne.jpg",
+    "img/himmel_hinten.jpg",
 ])
-
-
 
 
 
@@ -429,9 +437,7 @@ const worldDrawCall = glance.createDrawCall(
     },
     [
         // texture bindings
-        [0, worldTextureAmbient],
-        [1, worldTextureDiffuse],
-        [2, worldTextureSpecular],
+        [0, worldTextureDiffuse]
     ]
 )
 
@@ -482,7 +488,7 @@ function rotateAroundAxis(degree,axis){
 }
 
 
-let matrix4 =  mat4.identity();
+let cubeRotationMatrix =  mat4.identity();
 
 
 function rotateAroundAxis2(degree, axis) {
@@ -490,7 +496,7 @@ function rotateAroundAxis2(degree, axis) {
     let translatedMatrix = mat4.translate(mat4.identity(), axis);
 
     // Multiply the input matrix with the translation matrix
-    let updatedMatrix = mat4.multiply( mat4.clone(matrix4), translatedMatrix);
+    let updatedMatrix = mat4.multiply( mat4.clone(cubeRotationMatrix), translatedMatrix);
 
     // Multiply the result with the rotation matrix
     updatedMatrix = mat4.multiply(updatedMatrix, rotationMatrix);
@@ -570,7 +576,7 @@ setRenderLoop((time) =>
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
   
     if(moveStarted){
-        let rad = tween(0,Math.PI/2,1000,time)       
+        let rad = tween(0,Math.PI/2,500,time)       
         cubeModelMatrix = rotateAroundAxis2(rad,axis)
     }
 
@@ -581,15 +587,15 @@ setRenderLoop((time) =>
 
     if(rotEnded){
         // the Matrix for making rotations around is rotated 90 degrees, and new bottom axis will be defined
-        matrix4 = rotateAroundAxis2(Math.PI/2,axis)
+        cubeRotationMatrix = rotateAroundAxis2(Math.PI/2,axis)
         //axis[1] += yTransl[idx]
         //axis[2] += xTransl[idx]
        
         let y = round2Decimals(0.4 * Math.cos(idx * Math.PI/2)) 
-        let x = round2Decimals(0.4 * Math.sin(idx * (Math.PI/2 - Math.PI))) 
+        let z = round2Decimals(0.4 * Math.sin(idx * (Math.PI/2 - Math.PI))) 
         axis[1] += y
-        axis[2] += x
-        console.log("y="+y +" x="+x)
+        axis[2] += z
+        console.log("y="+y +" z="+z)
         idx++;
         /*if(idx >=4){
             idx = 0
@@ -599,7 +605,7 @@ setRenderLoop((time) =>
 })
 
 
-
+//old way to calculate which axis to add to to get the new rotationAxis
 let yTransl = [0.4,0,-0.4,0]
 let xTransl = [0,-0.4,0,0.4]
 
@@ -619,7 +625,8 @@ onMouseDrag((e) =>
 
 
 
-
+viewTilt = 75
+viewDist = 8
 
 onMouseWheel((e) =>
 {
